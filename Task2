@@ -1,0 +1,131 @@
+# This Python script is a basic vulnerability scanning tool that scans a network or website for:
+# 1. Open ports
+# 2. Outdated software versions
+# 3. HTTP header misconfigurations
+# It requires the `nmap` library and `nmap` tool to be installed on the system to perform the scans.
+# The user inputs an IP address or URL, and the script performs the scans and provides a report.
+
+import nmap
+import socket
+
+def scan_ports(host):
+    nm = nmap.PortScanner()
+    
+    try:
+        print(f"Scanning open ports on {host}...")
+        nm.scan(host, '1-1024')
+        
+        if host not in nm.all_hosts():
+            print(f"No scan results found for {host}")
+            return []
+        
+        open_ports = []
+        
+        for protocol in nm[host].all_protocols():
+            print(f"\nProtocol: {protocol}")
+            ports = nm[host][protocol].keys()
+            for port in ports:
+                state = nm[host][protocol][port]['state']
+                if state == 'open':
+                    open_ports.append(port)
+                    print(f"Port: {port} - State: {state}")
+        
+        return open_ports
+    
+    except Exception as e:
+        print(f"Error scanning ports: {e}")
+        return []
+
+def check_outdated_software(host):
+    nm = nmap.PortScanner()
+    
+    try:
+        print(f"\nChecking for outdated software on {host}...")
+        nm.scan(host, '1-1024', arguments='-sV')
+        
+        if host not in nm.all_hosts():
+            print(f"No scan results found for {host}")
+            return []
+        
+        outdated_software = []
+        
+        for protocol in nm[host].all_protocols():
+            ports = nm[host][protocol].keys()
+            for port in ports:
+                service = nm[host][protocol][port]['name']
+                version = nm[host][protocol][port]['version']
+                print(f"Port: {port}, Service: {service}, Version: {version}")
+                
+                if service == 'http' and int(version.split('.')[0]) < 2:
+                    outdated_software.append(f"Outdated {service} version: {version}")
+        
+        return outdated_software
+    
+    except Exception as e:
+        print(f"Error checking outdated software: {e}")
+        return []
+
+def check_http_headers(host):
+    nm = nmap.PortScanner()
+    
+    try:
+        print(f"\nChecking HTTP headers for misconfigurations on {host}...")
+        nm.scan(host, '80', arguments='--script=http-headers')
+        
+        if host not in nm.all_hosts():
+            print(f"No scan results found for {host}")
+            return []
+        
+        http_headers = nm[host]['tcp'][80]['script']
+        
+        print("HTTP Headers:")
+        for header, value in http_headers.items():
+            print(f"{header}: {value}")
+        
+        misconfigurations = []
+        
+        if 'X-Frame-Options' not in http_headers:
+            misconfigurations.append("Missing X-Frame-Options header")
+        if 'Strict-Transport-Security' not in http_headers:
+            misconfigurations.append("Missing Strict-Transport-Security header")
+        if 'X-XSS-Protection' not in http_headers:
+            misconfigurations.append("Missing X-XSS-Protection header")
+        
+        return misconfigurations
+    
+    except Exception as e:
+        print(f"Error checking HTTP headers: {e}")
+        return []
+
+def run_vulnerability_scan(host):
+    print(f"Running vulnerability scan on {host}...\n")
+    
+    open_ports = scan_ports(host)
+    if not open_ports:
+        print(f"No open ports found on {host}")
+    
+    outdated_software = check_outdated_software(host)
+    if outdated_software:
+        print("\nOutdated Software Detected:")
+        for software in outdated_software:
+            print(software)
+    
+    misconfigurations = check_http_headers(host)
+    if misconfigurations:
+        print("\nMisconfigurations Detected:")
+        for misconfig in misconfigurations:
+            print(misconfig)
+    else:
+        print("\nNo major HTTP misconfigurations found.")
+
+def validate_input(user_input):
+    try:
+        socket.inet_aton(user_input)
+        return user_input
+    except socket.error:
+        return user_input
+
+if __name__ == "__main__":
+    target_host = input("Enter the IP address or URL to scan: ")
+    target_host = validate_input(target_host)
+    run_vulnerability_scan(target_host)
